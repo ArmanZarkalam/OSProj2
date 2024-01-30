@@ -37,3 +37,19 @@ void* memset(void*, int, uint);
 void* malloc(uint);
 void free(void*);
 int atoi(const char*);
+
+
+// =========== ADDED ===========
+
+typedef struct threadLock{
+  uint lockNo;
+}_threadLock;
+
+int clone(void (*start_routine)(void*,void*), void *, void *, void *);
+int join(void**);
+
+int thread_create(void (*start_routine)(void *,void*), void * arg1, void * arg2);
+int thread_join(); // extra 
+int lock_initial(_threadLock *lk);
+void lock_acquire(_threadLock *lk);
+void lock_release(_threadLock *lk);
