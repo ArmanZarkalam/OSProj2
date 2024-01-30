@@ -532,3 +532,107 @@ procdump(void)
     cprintf("\n");
   }
 }
+
+// =========== ADDED ==========
+
+int clone(void(*function)(void*,void*), void *arg1, void *arg2, void* stack)
+{
+  struct proc *proccess = myproc();
+
+  // create a copy from proccess
+  struct proc *copy;
+  if((copy = allocproc()) == 0)
+    return -1;
+  copy->pgdir = proccess->pgdir;
+  copy->sz = proccess->sz;
+  copy->parent = proccess;
+  *copy->tf = *proccess->tf;
+  
+
+  // Push fake return address to the stack of thread
+  void * stack_arg1, *stack_arg2, *stack_ret;
+
+  stack_ret = stack + PGSIZE - 3 * sizeof(void *);
+  *(uint*)stack_ret = 0xFFFFFFF;
+
+  stack_arg1 = stack + PGSIZE - 2 * sizeof(void *);
+  *(uint*)stack_arg1 = (uint)arg1;
+
+  stack_arg2 = stack + PGSIZE - 1 * sizeof(void *);
+  *(uint*)stack_arg2 = (uint)arg2;
+
+
+  // Save address of stack and init tf in copy proccess
+  copy->tf->esp = (uint) stack;
+  copy->threadstack = stack;
+  copy->tf->esp += PGSIZE - 3 * sizeof(void*);
+  copy->tf->ebp = copy->tf->esp;
+  copy->tf->eip = (uint) function;
+  copy->tf->eax = 0; // like pid which have is 0 for child
+
+  // copy ofile of proccess to copy proccess
+  int i;
+  for(i = 0; i < NOFILE; i++)
+    if(proccess->ofile[i])
+      copy->ofile[i] = filedup(proccess->ofile[i]);
+  copy->cwd = idup(proccess->cwd);
+
+  // copy name of proccess to copy proccess
+  safestrcpy(copy->name, proccess->name, sizeof(proccess->name));
+ 
+ // make copy proccess runnable
+  acquire(&ptable.lock);
+  copy->state = RUNNABLE;
+  release(&ptable.lock);
+
+  return copy->pid;
+}
+
+int join(void** stack)
+{
+  struct proc *proccess;
+  int pid;
+  struct proc *currentProccess = myproc();
+  acquire(&ptable.lock);
+  int havekids;
+  while(1){
+    // Scan through table looking for zombie children.
+    havekids = 0;
+    for(proccess = ptable.proc; proccess < &ptable.proc[NPROC]; proccess++) {
+
+      // Check if this is a child thread (parent or shared address space)
+      if(proccess->parent != currentProccess || proccess->pgdir != proccess->parent->pgdir)
+        continue;
+        
+      havekids = 1;
+      if(proccess->state == ZOMBIE){ // if found a proccess
+        pid = proccess->pid;
+
+        // Remove thread from the kernel stack
+        kfree(proccess->kstack);
+        proccess->kstack = 0;
+
+        // Reset thread in process table
+        proccess->pid = 0;
+        proccess->parent = 0;
+        proccess->name[0] = 0;
+        proccess->killed = 0;
+        proccess->state = UNUSED;
+        stack = proccess->threadstack;
+        proccess->threadstack = 0;
+
+        release(&ptable.lock);
+        return pid;
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if(!havekids || currentProccess->killed){
+      release(&ptable.lock);
+      return -1;
+    }
+
+    // Wait for children to exit.  (See wakeup1 call in proc_exit.)
+    sleep(currentProccess, &ptable.lock);
+  }
+}
