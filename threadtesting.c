@@ -1,70 +1,71 @@
 #include "types.h"
-#include "param.h"
-#include "memlayout.h"
-#include "mmu.h"
-#include "proc.h"
-#include "user.h"
 #include "stat.h"
+#include "user.h"
 #include "fcntl.h"
-#include "x86.h"
 
-#define SLEEP_TIME 100
+_threadLock *lk;
 
-volatile int counter = 0;
-
-lock_t* lock;
-
-void thread1_func(void* arg1, void* arg2) 
+void f1(void *arg1, void *arg2)
 {
-  int num = *(int*)arg1;
-  if (num) lock_acquire(lock);
-  {
-    counter++;
-    printf(1, "1. First : %d \n", counter );
-  }  
-  sleep(SLEEP_TIME);
-  if (num) lock_release(lock);
+  int num = *(int *)arg1;
+  if (num)
+    lock_acquire(lk);
+  printf(1, "1.%s\n", num ? "first" : "whenever");
+  printf(1, "-- sleeping in 1\n");
+  sleep(100);
+  if (num)
+    lock_release(lk);
   exit();
 }
 
-void thread2_func(void* arg1, void* arg2) 
+void f2(void *arg1, void *arg2)
 {
-  int num = *(int*)arg1;
-  if (num) lock_acquire(lock);
-  {
-    counter++;
-    printf(1, "2. Second: %d \n", counter );
-  }
-  sleep(SLEEP_TIME);
-  if (num) lock_release(lock);
+  int num = *(int *)arg1;
+  if (num)
+    lock_acquire(lk);
+  printf(1, "2.%s\n", num ? "second" : "whenever");
+  printf(1, "-- sleeping in 2\n");
+  sleep(100);
+  if (num)
+    lock_release(lk);
   exit();
 }
 
-void thread3_func(void* arg1, void* arg2) 
+void f3(void *arg1, void *arg2)
 {
-  int num = *(int*)arg1;
-  if (num) lock_acquire(lock);
-  {
-    counter++;
-    printf(1, "3. Third: %d \n", counter );
-  }
-  sleep(SLEEP_TIME);
-  if (num) lock_release(lock);
+  int num = *(int *)arg1;
+  if (num)
+    lock_acquire(lk);
+  printf(1, "3.%s\n", num ? "third" : "whenever");
+  printf(1, "-- sleeping in 3\n");
+  sleep(100);
+  if (num)
+    lock_release(lk);
   exit();
 }
 
-int
-main(int argc, char *argv[])
+int main(int argc, char *argv[])
 {
-  lock_init(lock);
-  int arg1 = 1, arg2 = 1;
+  lock_initial(lk);
+  int a = 1, b = 1;
 
-  thread_create(&thread1_func, (void *)&arg1, (void *)&arg2);
-  thread_create(&thread2_func, (void *)&arg1, (void *)&arg2);
-  thread_create(&thread3_func, (void *)&arg1, (void *)&arg2);
+  printf(1, "** Sequential print: **\n");
+  thread_create(&f1, (void *)&a, (void *)&b);
+  thread_create(&f2, (void *)&a, (void *)&b);
+  thread_create(&f3, (void *)&a, (void *)&b);
   thread_join();
   thread_join();
   thread_join();
-  
+
+  int c = 0;
+  printf(1, "===============================\n");
+  printf(1, "** Shuffle print: **\n");
+  thread_create(&f1, (void *)&c, (void *)&b);
+  thread_create(&f2, (void *)&c, (void *)&b);
+  thread_create(&f3, (void *)&c, (void *)&b);
+  thread_join();
+  thread_join();
+  thread_join();
+
   exit();
 }
